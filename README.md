@@ -1174,8 +1174,7 @@ SOFTWARE.
 
 프로젝트에 대한 질문이나 제안이 있으시면:
 
-- **GitHub Issues**: [이슈 등록](../../issues)
-- **Email**: [your.email@example.com](mailto:your.email@example.com)
+- **Email**: [bjt0709@gmail.com](mailto:bjt0709@gmail.com)
 
 ---
 

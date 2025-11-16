@@ -1,0 +1,40 @@
+<script>
+(function (global) {
+  const root = global || (typeof window !== 'undefined' ? window : {});
+  root.CommonUI = root.CommonUI || {};
+  const CommonUI = root.CommonUI;
+
+  if (!CommonUI.escapeHtml) {
+    CommonUI.escapeHtml = function escapeHtml(str) {
+      if (str === null || str === undefined) return '';
+      return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;')
+        .replace(/`/g, '&#96;');
+    };
+  }
+
+  if (!CommonUI.PERIOD_STATUS) {
+    CommonUI.PERIOD_STATUS = Object.freeze({
+      OPEN: 'open',
+      CLOSED: 'closed',
+      SCHEDULED: 'scheduled'
+    });
+  }
+
+  if (!CommonUI.resolvePeriodStatus) {
+    CommonUI.resolvePeriodStatus = function resolvePeriodStatus(result) {
+      if (!result) {
+        return CommonUI.PERIOD_STATUS.CLOSED;
+      }
+      if (result.status) {
+        return String(result.status);
+      }
+      return result.isOpen ? CommonUI.PERIOD_STATUS.OPEN : CommonUI.PERIOD_STATUS.CLOSED;
+    };
+  }
+})(this);
+</script>

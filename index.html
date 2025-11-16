@@ -1,0 +1,546 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <base target="_top">
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;600;700&display=swap" rel="stylesheet">
+  <?!= include('styles'); ?>
+  <?!= include('common'); ?>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>🎓 멘토링 프로그램 신청</h1>
+      <p>2025년 신입생 멘토링 프로그램에 오신 것을 환영합니다</p>
+    </div>
+    
+    <div class="content">
+      <div id="periodAlert" class="alert"></div>
+      
+      <div id="applicationForm" style="display: none;">
+        <h2>신청자 정보 입력</h2>
+        <form id="menteeForm">
+          <div class="form-group" style="background-color: #f8f9fa; padding: 15px; border-radius: 8px; margin-bottom: 20px;">
+            <label style="font-weight: 600; margin-bottom: 10px; display: block;">개인정보 수집·이용 동의 *</label>
+            <div style="background-color: white; padding: 12px; border: 1px solid #dee2e6; border-radius: 5px; margin-bottom: 15px; font-size: 14px; line-height: 1.5;">
+              2025학년도 '가대 후배사랑 100인 멘토링 프로그램' 참여를 위해 개인정보(성명, 학번, 소속, 전화번호, 이메일)를 수집하며, 프로그램 운영 종료 시까지 보유합니다.
+            </div>
+            <div style="text-align: center;">
+              <label style="cursor: pointer; display: inline-block; margin-right: 30px; font-weight: 500;">
+                <input type="radio" name="privacyAgree" value="예" required style="margin-right: 5px;">
+                동의합니다
+              </label>
+              <label style="cursor: pointer; display: inline-block; font-weight: 500;">
+                <input type="radio" name="privacyAgree" value="아니오" required style="margin-right: 5px;">
+                동의하지 않습니다
+              </label>
+            </div>
+          </div>
+          
+          <div class="form-group">
+            <label for="studentId">학번 *</label>
+            <input type="text" id="studentId" required placeholder="예: 202512345">
+          </div>
+          
+          <div class="form-group">
+            <label for="name">이름 *</label>
+            <input type="text" id="name" required placeholder="홍길동">
+          </div>
+          
+          <div class="form-group">
+            <label for="department">학과 *</label>
+            <input type="text" id="department" required placeholder="컴퓨터공학과">
+          </div>
+          
+          <div class="form-group">
+            <label for="email">이메일 *</label>
+            <input type="email" id="email" required placeholder="example@gmail.com">
+          </div>
+          
+          <div class="form-group">
+            <label for="phone">전화번호 *</label>
+            <input type="tel" id="phone" required placeholder="01012345678" maxlength="11" pattern="[0-9]{10,11}">
+            <small style="color: #666; font-size: 12px;">하이픈(-) 없이 숫자만 입력해주세요</small>
+          </div>
+          
+          <button type="submit" class="btn btn-primary">프로그램 목록 보기</button>
+        </form>
+      </div>
+      
+      <div id="programList" style="display: none;">
+        <h2>프로그램 선택</h2>
+        <div class="alert alert-info">
+          최소 1개, 최대 3개까지 신청 가능합니다. 시간이 겹치는 프로그램은 신청할 수 없습니다.
+        </div>
+        
+        <div id="filterSection">
+          <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin-bottom:10px;">
+            <input type="text" id="searchInput" placeholder="검색어 입력 (예: 홍길동, 12월, 25일, 오전, 오후, 강의실)..." 
+                  style="flex:1; padding: 10px; border: 2px solid #e0e0e0; border-radius: 8px;">
+            <select id="statusFilter" style="padding:10px; border:2px solid #e0e0e0; border-radius:8px;">
+              <option value="all">전체</option>
+              <option value="open">신청가능</option>
+              <option value="full">마감</option>
+              <option value="launch">개설(3명 이상)</option>
+              <option value="draft">미개설(0~2명)</option>
+            </select>
+            <select id="groupBy" style="padding:10px; border:2px solid #e0e0e0; border-radius:8px;">
+              <option value="none">그룹 없음</option>
+              <option value="date" selected>날짜별 그룹</option>
+              <option value="mentor">멘토별 그룹</option>
+            </select>
+            <select id="sortBy" style="padding:10px; border:2px solid #e0e0e0; border-radius:8px;">
+              <option value="time">시간순</option>
+              <option value="seats">잔여좌석 많은순</option>
+            </select>
+            <button type="button" id="expandAll" class="btn btn-secondary">모두 펼치기</button>
+            <button type="button" id="collapseAll" class="btn btn-secondary">모두 접기</button>
+          </div>
+          <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:10px;">
+            <button type="button" class="btn btn-secondary" data-qf="all">전체</button>
+            <button type="button" class="btn btn-secondary" data-qf="today">오늘 이후</button>
+            <button type="button" class="btn btn-secondary" data-qf="week">이번 주</button>
+            <button type="button" class="btn btn-secondary" data-qf="closing">마감 임박</button>
+          </div>
+          <div style="font-size: 12px; color: #666; margin-bottom: 5px;">
+            💡 검색 가능: 멘토 이름, 프로그램 내용, 장소, 날짜(2024-12-25, 12-25, 12월, 25일), 시간(14:00, 오전, 오후)
+          </div>
+        </div>
+        
+        <div id="programs" class="program-grid">
+          <div class="loading">
+            <div class="spinner"></div>
+            <p>프로그램 목록을 불러오는 중...</p>
+          </div>
+        </div>
+        
+        <!-- 상세 모달 -->
+        <div id="detailOverlay" class="modal-overlay" onclick="closeProgramDetail(event)">
+          <div class="modal" role="dialog" aria-modal="true" aria-labelledby="detailTitle" onclick="event.stopPropagation()">
+            <div class="modal-header">
+              <h3 id="detailTitle" style="margin:0; font-size:1.2em;">프로그램 상세</h3>
+              <button class="modal-close" onclick="closeProgramDetail(event)">✕</button>
+            </div>
+            <div id="detailBody"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    let menteeInfo = {};
+    let programs = [];
+    let isApplicationOpen = true; // 신청 가능 여부 전역 변수
+    let searchDebounceTimer;
+    let quickFilter = 'all';
+    const { escapeHtml, resolvePeriodStatus, PERIOD_STATUS } = CommonUI;
+    
+    // 페이지 로드 시 실행
+    window.onload = function() {
+      checkPeriod();
+    };
+    
+    // 신청 기간 확인
+    function checkPeriod() {
+      google.script.run
+        .withSuccessHandler(function(result) {
+          const alertDiv = document.getElementById('periodAlert');
+          isApplicationOpen = result.isOpen; // 전역 변수 설정
+          
+          const status = resolvePeriodStatus(result);
+          let icon = '✅';
+          let alertClass = 'alert alert-success';
+
+          if (status === PERIOD_STATUS.CLOSED) {
+            icon = '❌';
+            alertClass = 'alert alert-danger';
+          } else if (status === PERIOD_STATUS.SCHEDULED) {
+            icon = '⏳';
+            alertClass = 'alert alert-warning';
+          }
+
+          const periodText = result.startDateLabel && result.endDateLabel ?
+            `<div class="muted">신청 기간: ${escapeHtml(result.startDateLabel)} ~ ${escapeHtml(result.endDateLabel)}</div>` : '';
+
+          alertDiv.className = alertClass;
+          alertDiv.innerHTML = `${icon} ${escapeHtml(result.message)}${periodText}`;
+
+          // 신청 폼은 항상 노출 (단, 신청 버튼은 isApplicationOpen으로 제어)
+          document.getElementById('applicationForm').style.display = 'block';
+        })
+        .withFailureHandler(function(error) {
+          console.error('Error:', error);
+          // 에러가 발생해도 폼은 표시
+          document.getElementById('applicationForm').style.display = 'block';
+        })
+        .checkApplicationPeriod();
+    }
+    
+    // 날짜 검색 매칭 함수
+    function searchDateMatch(programDate, searchTerm) {
+      // programDate 형식: "YYYY-MM-DD"
+      if (!programDate || !searchTerm) return false;
+      
+      // 전체 날짜 검색 (2024-12-25)
+      if (programDate.toLowerCase().includes(searchTerm)) return true;
+      
+      // 날짜를 파싱
+      const [year, month, day] = programDate.split('-');
+      
+      // 월-일 검색 (12-25)
+      const monthDay = `${month}-${day}`;
+      if (monthDay.includes(searchTerm)) return true;
+      
+      // 월/일 검색 (12/25)
+      const monthDaySlash = `${month}/${day}`;
+      if (monthDaySlash.includes(searchTerm)) return true;
+      
+      // 월 이름 검색 (한글)
+      const monthNames = ['', '1월', '2월', '3월', '4월', '5월', '6월', 
+                          '7월', '8월', '9월', '10월', '11월', '12월'];
+      const monthNum = parseInt(month);
+      if (monthNames[monthNum] && monthNames[monthNum].includes(searchTerm)) return true;
+      
+      // 월만 검색 (숫자)
+      if (searchTerm.length <= 2 && month.includes(searchTerm.padStart(2, '0'))) return true;
+      
+      // 일만 검색 (숫자)
+      if (searchTerm.endsWith('일')) {
+        const daySearch = searchTerm.replace('일', '').padStart(2, '0');
+        if (day === daySearch) return true;
+      }
+      
+      // 년도 검색
+      if (year.includes(searchTerm)) return true;
+      
+      return false;
+    }
+    
+    // 폼 제출
+    document.getElementById('menteeForm').addEventListener('submit', function(e) {
+      e.preventDefault();
+      
+      // 개인정보 동의 체크
+      const privacyAgree = document.querySelector('input[name="privacyAgree"]:checked');
+      if (!privacyAgree) {
+        alert('개인정보 수집·이용에 동의해주세요.');
+        return;
+      }
+      
+      if (privacyAgree.value === '아니오') {
+        alert('개인정보 수집·이용에 동의하지 않으면 프로그램에 참여할 수 없습니다.');
+        return;
+      }
+      
+      menteeInfo = {
+        studentId: document.getElementById('studentId').value,
+        name: document.getElementById('name').value,
+        department: document.getElementById('department').value,
+        email: document.getElementById('email').value,
+        phone: document.getElementById('phone').value,
+        privacyAgree: privacyAgree.value
+      };
+      
+      // 전화번호 형식 검증 (하이픈 없이 10-11자리 숫자)
+      const phoneRegex = /^01[0-9]{8,9}$/;
+      if (!phoneRegex.test(menteeInfo.phone)) {
+        alert('전화번호는 하이픈(-) 없이 숫자만 입력해주세요.\n예: 01074903697');
+        return;
+      }
+      
+      document.getElementById('applicationForm').style.display = 'none';
+      document.getElementById('programList').style.display = 'block';
+      loadPrograms();
+    });
+    
+    // 프로그램 목록 로드
+    function loadPrograms() {
+      google.script.run
+        .withSuccessHandler(displayPrograms)
+        .withFailureHandler(function(error) {
+          console.error('Error:', error);
+          document.getElementById('programs').innerHTML = 
+            '<div class="alert alert-danger">프로그램 목록을 불러오는데 실패했습니다.</div>';
+        })
+        .getPrograms();
+    }
+    
+    // 프로그램 표시
+    function displayPrograms(data) {
+      programs = data;
+      renderPrograms();
+    }
+    
+    // 프로그램 렌더링
+    function renderPrograms() {
+      const searchTerm = document.getElementById('searchInput') ? 
+                        document.getElementById('searchInput').value.toLowerCase().trim() : '';
+      const status = document.getElementById('statusFilter') ? document.getElementById('statusFilter').value : 'all';
+      const groupBy = document.getElementById('groupBy') ? document.getElementById('groupBy').value : 'none';
+      const sortBy = document.getElementById('sortBy') ? document.getElementById('sortBy').value : 'time';
+      
+      // 필터링
+      let filteredPrograms = programs.filter(program => {
+        // 검색어가 비어있으면 모든 프로그램 표시
+        // 상태 필터 판정
+        const currentCount = parseInt(program.currentCount) || 0;
+        const maxCount = parseInt(program.maxCount) || 7;
+        const isFull = currentCount >= maxCount;
+        const isLaunch = currentCount >= 3 && currentCount < maxCount;
+        const isDraft = currentCount < 3;
+
+        if (status === 'open' && isFull) return false;
+        if (status === 'full' && !isFull) return false;
+        if (status === 'launch' && !isLaunch) return false;
+        if (status === 'draft' && !isDraft) return false;
+
+        // 퀵 필터
+        if (quickFilter !== 'all') {
+          // 날짜 파싱 (YYYY-MM-DD)
+          let d = new Date(program.date);
+          if (isNaN(d.getTime())) {
+            const parts = String(program.date || '').split('-');
+            if (parts.length === 3) {
+              d = new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]));
+            }
+          }
+          const today = new Date(); today.setHours(0,0,0,0);
+          const dow = today.getDay(); // 0=Sun
+          const weekStart = new Date(today); weekStart.setDate(today.getDate() - dow + 1); // Mon
+          const weekEnd = new Date(weekStart); weekEnd.setDate(weekStart.getDate() + 6); // Sun
+          if (quickFilter === 'today' && !(d >= today)) return false;
+          if (quickFilter === 'week' && !(d >= weekStart && d <= weekEnd)) return false;
+          if (quickFilter === 'closing') {
+            const remain = (maxCount - currentCount);
+            if (!(remain > 0 && remain <= 2)) return false;
+          }
+        }
+
+        if (!searchTerm) return true;
+        
+        // 기본 검색 (멘토 이름, 내용, 장소)
+        const basicMatch = (program.mentorName || '').toLowerCase().includes(searchTerm) ||
+                          (program.content || '').toLowerCase().includes(searchTerm) ||
+                          (program.location || '').toLowerCase().includes(searchTerm);
+        
+        // 날짜 검색 개선
+        const dateMatch = searchDateMatch(program.date, searchTerm);
+        
+        // 시간 검색 추가
+        const timeMatch = (program.startTime && program.startTime.toLowerCase().includes(searchTerm)) ||
+                         (program.endTime && program.endTime.toLowerCase().includes(searchTerm)) ||
+                         (searchTerm === '오전' && parseInt(program.startTime) < 12) ||
+                         (searchTerm === '오후' && parseInt(program.startTime) >= 12);
+        
+        return basicMatch || dateMatch || timeMatch;
+      });
+
+      // 정렬
+      filteredPrograms.sort((a, b) => {
+        if (sortBy === 'seats') {
+          const aRemain = (parseInt(a.maxCount) || 7) - (parseInt(a.currentCount) || 0);
+          const bRemain = (parseInt(b.maxCount) || 7) - (parseInt(b.currentCount) || 0);
+          if (bRemain !== aRemain) return bRemain - aRemain;
+        }
+        // 기본 시간순: 날짜 -> 시작시간
+        const da = new Date(a.date);
+        const db = new Date(b.date);
+        const dcmp = da - db;
+        if (!isNaN(dcmp) && dcmp !== 0) return dcmp;
+        return String(a.startTime).localeCompare(String(b.startTime));
+      });
+      
+      // 카드 생성 함수 (내용 4줄 고정 + 더보기는 모달)
+      function cardHTML(program) {
+        // 안전한 숫자 처리
+        const currentCount = parseInt(program.currentCount) || 0;
+        const maxCount = parseInt(program.maxCount) || 7;
+        
+        const isFull = currentCount >= maxCount;
+        const programStatus = program.programStatus || (isFull ? '마감' : (currentCount >= 3 ? '개설' : '미개설'));
+        const remaining = Math.max(maxCount - currentCount, 0);
+
+        const statusBadgeClass = programStatus === '마감' ? 'badge-full' :
+          (programStatus === '개설' ? 'badge-open' : 'badge-warning');
+        const statusBadge = `<span class="badge ${statusBadgeClass}">${programStatus}</span>`;
+
+        const capacityBadge = isFull ?
+          '<span class="badge badge-full">정원 마감</span>' :
+          `<span class="badge badge-available">잔여 ${remaining}명</span>`;
+        
+        return `
+          <div class="program-card">
+            <div class="card-body">
+              <h3>${escapeHtml(program.mentorName)} 멘토</h3>
+              <div class="program-info"><strong>📅 날짜:</strong> ${escapeHtml(program.date)}</div>
+              <div class="program-info"><strong>⏰ 시간:</strong> ${escapeHtml(program.startTime)} - ${escapeHtml(program.endTime)}</div>
+              <div class="program-info"><strong>📍 장소:</strong> ${escapeHtml(program.location)}</div>
+              <div class="program-info">
+                <strong>📝 내용:</strong><br>
+                <div class="program-content clamp-4">${escapeHtml(program.content)}</div>
+                <button type="button" class="link-button" onclick="showProgramDetail('${program.programId}')">더보기</button>
+              </div>
+              <div class="program-info">
+                <strong>👥 신청현황:</strong> ${currentCount}/${maxCount}명
+                <div class="badge-row">
+                  ${statusBadge}
+                  ${capacityBadge}
+                </div>
+              </div>
+            </div>
+            <div class="card-footer">
+              <button class="btn btn-primary" 
+                      onclick="applyProgram('${program.programId}')"
+                      ${isFull || !isApplicationOpen ? 'disabled' : ''}>
+                ${!isApplicationOpen ? '마감' : '신청하기'}
+              </button>
+            </div>
+          </div>
+        `;
+      }
+
+      let html = '';
+      if (groupBy === 'none') {
+        filteredPrograms.forEach(program => { html += cardHTML(program); });
+      } else {
+        const groupKey = groupBy === 'date' ? (p) => p.date : (p) => p.mentorName;
+        const groups = {};
+        filteredPrograms.forEach(p => {
+          const key = groupKey(p) || '기타';
+          if (!groups[key]) groups[key] = [];
+          groups[key].push(p);
+        });
+        const keys = Object.keys(groups).sort();
+        keys.forEach(key => {
+          const list = groups[key];
+          // 그룹 요약 정보
+          const total = list.length;
+          const applicants = list.reduce((sum, p) => sum + (parseInt(p.currentCount) || 0), 0);
+          const capacity = list.reduce((sum, p) => sum + (parseInt(p.maxCount) || 7), 0);
+          html += `
+            <details class="group" open>
+              <summary style="cursor:pointer; font-weight:600; padding:8px 4px;">${escapeHtml(key)} — ${total}개, ${applicants}/${capacity}명</summary>
+              <div class="program-grid">
+                ${list.map(cardHTML).join('')}
+              </div>
+            </details>
+          `;
+        });
+      }
+      
+      if (filteredPrograms.length === 0) {
+        html = '<div class="alert alert-warning">검색 결과가 없습니다.</div>';
+      }
+      
+      document.getElementById('programs').innerHTML = html;
+
+      // 비교 패널 제거됨
+    }
+    
+    // 검색 이벤트
+    document.addEventListener('input', function(e) {
+      if (e.target.id === 'searchInput') {
+        if (searchDebounceTimer) clearTimeout(searchDebounceTimer);
+        searchDebounceTimer = setTimeout(renderPrograms, 200);
+      }
+    });
+    document.addEventListener('change', function(e) {
+      if (e.target.id === 'statusFilter') {
+        renderPrograms();
+      }
+      if (e.target.id === 'groupBy' || e.target.id === 'sortBy') {
+        renderPrograms();
+      }
+    });
+
+    // 클릭 이벤트 처리 (그룹 접기/펼치기, 퀵필터)
+    document.addEventListener('click', function(e) {
+      if (e.target && e.target.id === 'expandAll') {
+        document.querySelectorAll('details.group').forEach(d => d.setAttribute('open', ''));
+      }
+      if (e.target && e.target.id === 'collapseAll') {
+        document.querySelectorAll('details.group').forEach(d => d.removeAttribute('open'));
+      }
+      if (e.target && e.target.dataset && e.target.dataset.qf) {
+        quickFilter = e.target.dataset.qf;
+        renderPrograms();
+      }
+    });
+
+    // 상세 모달 열기
+    function showProgramDetail(programId) {
+      const p = programs.find(pr => pr.programId === programId);
+      if (!p) return;
+      const currentCount = parseInt(p.currentCount, 10) || 0;
+      const maxCount = parseInt(p.maxCount, 10) || 7;
+      const statusLabel = p.programStatus || (currentCount >= maxCount ? '마감' : (currentCount >= 3 ? '개설' : '미개설'));
+      const statusClass = statusLabel === '마감' ? 'badge-full' : statusLabel === '개설' ? 'badge-open' : 'badge-warning';
+      const body = document.getElementById('detailBody');
+      body.innerHTML = `
+        <div class="program-info"><strong>멘토:</strong> ${escapeHtml(p.mentorName)}</div>
+        <div class="program-info"><strong>날짜:</strong> ${escapeHtml(p.date)}</div>
+        <div class="program-info"><strong>시간:</strong> ${escapeHtml(p.startTime)} - ${escapeHtml(p.endTime)}</div>
+        <div class="program-info"><strong>장소:</strong> ${escapeHtml(p.location)}</div>
+        <div class="program-info"><strong>내용:</strong><br><div class="program-content">${escapeHtml(p.content)}</div></div>
+        <div class="program-info">
+          <strong>신청현황:</strong> ${currentCount}/${maxCount}명
+          <div class="badge-row">
+            <span class="badge ${statusClass}">${statusLabel}</span>
+            ${currentCount >= maxCount ? '<span class="badge badge-full">정원 마감</span>' : `<span class="badge badge-available">잔여 ${maxCount - currentCount}명</span>`}
+          </div>
+        </div>
+      `;
+      document.getElementById('detailTitle').textContent = `${p.mentorName} 멘토 프로그램 상세`;
+      const overlay = document.getElementById('detailOverlay');
+      overlay.style.display = 'flex';
+    }
+
+    // 상세 모달 닫기
+    function closeProgramDetail(event) {
+      const overlay = document.getElementById('detailOverlay');
+      overlay.style.display = 'none';
+    }
+    
+    // 프로그램 신청
+    function applyProgram(programId) {
+      if (!isApplicationOpen) {
+        alert('신청 기간이 마감되었습니다.');
+        return;
+      }
+      
+      if (!menteeInfo.studentId) {
+        alert('먼저 신청자 정보를 입력해주세요.');
+        document.getElementById('applicationForm').style.display = 'block';
+        document.getElementById('programList').style.display = 'none';
+        return;
+      }
+      
+      const program = programs.find(p => p.programId === programId);
+      if (!confirm(`${program.mentorName} 멘토의 프로그램을 신청하시겠습니까?\n날짜: ${program.date}\n시간: ${program.startTime}-${program.endTime}`)) {
+        return;
+      }
+      
+      const applicationData = {
+        ...menteeInfo,
+        programId: programId
+      };
+      
+      google.script.run
+        .withSuccessHandler(function(result) {
+          if (result.success) {
+            alert(result.message);
+            loadPrograms(); // 목록 새로고침
+          } else {
+            alert('신청 실패: ' + result.message);
+          }
+        })
+        .withFailureHandler(function(error) {
+          alert('오류가 발생했습니다: ' + error);
+        })
+        .submitApplication(applicationData);
+    }
+  </script>
+</body>
+</html>

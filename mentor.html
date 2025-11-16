@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <base target="_top">
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;600;700&display=swap" rel="stylesheet">
+  <?!= include('styles'); ?>
+  <?!= include('common'); ?>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>👨‍🏫 멘토 신청자 조회</h1>
+      <p>내 프로그램에 신청한 멘티들을 확인할 수 있습니다</p>
+    </div>
+    
+    <div class="content">
+      <div id="loginForm">
+        <h2>멘토 인증</h2>
+        <form id="mentorForm">
+          <div class="form-group">
+            <label for="mentorId">학번 *</label>
+            <input type="text" id="mentorId" required 
+                   placeholder="멘토 학번 입력">
+          </div>
+          
+          <button type="submit" class="btn btn-primary">조회하기</button>
+        </form>
+      </div>
+      
+      <div id="mentorDashboard" style="display: none;">
+        <h2>내 프로그램 신청 현황</h2>
+        
+        <div id="programs">
+          <div class="loading">
+            <div class="spinner"></div>
+            <p>신청자 목록을 불러오는 중...</p>
+          </div>
+        </div>
+        
+        <button class="btn btn-secondary" onclick="backToSearch()">다시 조회</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const { escapeHtml } = CommonUI;
+    function safeTel(t) {
+      return String(t || '').replace(/[^0-9+]/g, '');
+    }
+    function safeMailto(m) {
+      return encodeURIComponent(String(m || ''));
+    }
+    // 폼 제출
+    document.getElementById('mentorForm').addEventListener('submit', function(e) {
+      e.preventDefault();
+      
+      const mentorId = document.getElementById('mentorId').value.trim();
+      console.log('멘토 학번:', mentorId); // 디버깅용
+      
+      if (!mentorId) {
+        alert('학번을 입력해주세요.');
+        return;
+      }
+      
+      // 로딩 표시
+      document.getElementById('loginForm').style.display = 'none';
+      document.getElementById('mentorDashboard').style.display = 'block';
+      
+      loadMentorApplications(mentorId);
+    });
+    
+    // 멘토 신청자 목록 로드
+    function loadMentorApplications(mentorId) {
+      console.log('loadMentorApplications 호출:', mentorId); // 디버깅용
+      
+      google.script.run
+        .withSuccessHandler(function(data) {
+          console.log('성공 응답:', data); // 디버깅용
+          displayMentorApplications(data);
+        })
+        .withFailureHandler(function(error) {
+          console.error('실패 응답:', error); // 디버깅용
+          
+          // 에러 시 로그인 폼으로 돌아가기
+          document.getElementById('loginForm').style.display = 'block';
+          document.getElementById('mentorDashboard').style.display = 'none';
+          
+          alert('조회 실패: ' + error + '\\n\\n등록된 학번인지 확인해주세요.');
+        })
+        .getMentorApplications(mentorId);
+    }
+    
+    // 멘토 신청자 목록 표시
+    function displayMentorApplications(programs) {
+      console.log('displayMentorApplications 호출:', programs); // 디버깅용
+      
+      if (!programs || programs.length === 0) {
+        document.getElementById('programs').innerHTML = 
+          '<div class="alert alert-warning">등록된 프로그램이 없거나 학번이 일치하지 않습니다.</div>';
+        return;
+      }
+      
+      let html = '';
+      let totalApplicants = 0;
+      
+      programs.forEach(program => {
+        totalApplicants += program.count;
+        
+        const maxCount = program.maxCount || 7;
+        const statusLabel = program.count >= maxCount ? '마감' : (program.count >= 3 ? '개설' : '미개설');
+        const statusClass = statusLabel === '마감' ? 'badge-full' : statusLabel === '개설' ? 'badge-open' : 'badge-warning';
+        const statusBadge = `<span class="badge ${statusClass}">${statusLabel}</span>`;
+        
+        html += `
+          <div class="program-card">
+            <h3>📅 ${escapeHtml(program.date)} ${escapeHtml(program.startTime)}-${escapeHtml(program.endTime)}</h3>
+            <div class="program-info">
+              <strong>📍 장소:</strong> ${escapeHtml(program.location)}
+            </div>
+            <div class="program-info">
+              <strong>📝 내용:</strong><br>${escapeHtml(program.content)}
+            </div>
+            <div class="program-info">
+              <strong>👥 신청자 수:</strong> ${program.count}/${maxCount}명 ${statusBadge}
+            </div>
+            
+            ${program.applicants && program.applicants.length > 0 ? `
+              <div style="margin-top: 15px;">
+                <h4>신청자 명단</h4>
+                <div class="table-wrapper">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>이름</th>
+                        <th>학번</th>
+                        <th>학과</th>
+                        <th>연락처</th>
+                        <th>이메일</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      ${program.applicants.map(applicant => `
+                        <tr>
+                          <td>${escapeHtml(applicant.name)}</td>
+                          <td>${escapeHtml(applicant.studentId)}</td>
+                          <td>${escapeHtml(applicant.department)}</td>
+                          <td><a href="tel:${safeTel(applicant.phone)}">${escapeHtml(applicant.phone)}</a></td>
+                          <td><a href="mailto:${safeMailto(applicant.email)}">${escapeHtml(applicant.email)}</a></td>
+                        </tr>
+                      `).join('')}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            ` : `
+              <div class="alert alert-warning" style="margin-top: 15px;">
+                아직 신청자가 없습니다.
+              </div>
+            `}
+          </div>
+        `;
+      });
+      
+      // 상단에 전체 통계 추가
+      const summaryHtml = `
+        <div class="stats-grid">
+          <div class="stat-card">
+            <h4>총 프로그램 수</h4>
+            <div class="number">${programs.length}</div>
+          </div>
+          <div class="stat-card">
+            <h4>총 신청자 수</h4>
+            <div class="number">${totalApplicants}</div>
+          </div>
+          <div class="stat-card">
+            <h4>평균 신청률</h4>
+            <div class="number">${Math.round((totalApplicants / (programs.length * 7)) * 100)}%</div>
+          </div>
+          <div class="stat-card">
+            <h4>마감 프로그램</h4>
+            <div class="number">${programs.filter(p => p.count >= 7).length}</div>
+          </div>
+        </div>
+      `;
+      
+      document.getElementById('programs').innerHTML = summaryHtml + html;
+    }
+    
+    // 다시 조회
+    function backToSearch() {
+      document.getElementById('loginForm').style.display = 'block';
+      document.getElementById('mentorDashboard').style.display = 'none';
+      document.getElementById('mentorId').value = '';
+    }
+    
+    // 페이지 로드 완료 확인
+    window.onload = function() {
+      console.log('멘토 페이지 로드 완료');
+    };
+  </script>
+</body>
+</html>

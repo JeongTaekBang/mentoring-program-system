@@ -1,0 +1,665 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <base target="_top">
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;600;700&display=swap" rel="stylesheet">
+  <?!= include('styles'); ?>
+  <?!= include('common'); ?>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>📊 관리자 대시보드</h1>
+      <p>전체 멘토링 프로그램 신청 현황을 확인할 수 있습니다</p>
+    </div>
+    
+    <div class="content">
+      <div id="adminLogin">
+        <h2>관리자 인증</h2>
+        <div class="form-group">
+          <label for="adminPin">관리자 PIN *</label>
+          <input type="password" id="adminPin" placeholder="관리자 PIN 입력">
+        </div>
+        <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
+          <button class="btn btn-primary" onclick="submitAdminPin()">인증</button>
+          <label style="user-select:none; cursor:pointer;">
+            <input type="checkbox" id="rememberPin">
+            이 브라우저에 12시간 저장
+          </label>
+        </div>
+        <div id="adminLoginMsg" class="alert alert-info" style="display:none; margin-top:10px;"></div>
+      </div>
+
+      <div class="alert alert-info">
+        <strong>관리자 전용 페이지입니다.</strong> 전체 프로그램 및 신청 현황을 확인하고 관리할 수 있습니다.
+      </div>
+      
+      <div id="adminActions" style="margin-bottom: 20px; display:none;">
+        <button class="btn btn-primary" onclick="loadDashboard()">📊 현황 새로고침</button>
+        <button class="btn btn-secondary" onclick="syncPrograms()">🔄 프로그램 동기화</button>
+        <button class="btn btn-secondary" onclick="updateSummary()">📋 요약시트 업데이트</button>
+        <button class="btn btn-secondary" onclick="exportUnderEnrolled()">🧾 미개설 신청자 시트 업데이트</button>
+        <button class="btn btn-secondary" onclick="adminLogout()">🚪 로그아웃</button>
+      </div>
+
+      <div id="settingsPanel" class="admin-card" style="display:none;">
+        <h2>🗓 신청 기간 설정</h2>
+        <p class="muted">신청 시작/종료 일시를 변경하면 즉시 적용되며, 모든 페이지의 접근 권한과 안내 문구가 업데이트됩니다.</p>
+        <div class="form-grid">
+          <div class="form-group">
+            <label for="applicationStart">신청 시작 일시</label>
+            <input type="datetime-local" id="applicationStart">
+          </div>
+          <div class="form-group">
+            <label for="applicationEnd">신청 종료 일시</label>
+            <input type="datetime-local" id="applicationEnd">
+          </div>
+        </div>
+        <div class="form-actions">
+          <button class="btn btn-secondary" type="button" onclick="loadApplicationSettings(true)">↺ 다시 불러오기</button>
+          <button class="btn btn-primary" type="button" onclick="saveApplicationSettings()">💾 저장</button>
+        </div>
+        <div id="settingsMessage" class="alert" style="display:none; margin-top:15px;"></div>
+        <div class="muted" id="settingsSummary" style="margin-top:10px;"></div>
+      </div>
+
+      <div id="dashboard" style="display:none;">
+        <div class="loading">
+          <div class="spinner"></div>
+          <p>대시보드 데이터를 불러오는 중...</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const { escapeHtml } = CommonUI;
+    let adminPinCache = '';
+    let collapsibleCounter = 0;
+
+    function setActiveAdminPin(pin) {
+      adminPinCache = pin || '';
+    }
+
+    function getActiveAdminPin() {
+      if (adminPinCache) return adminPinCache;
+      const auth = getSavedAdminAuth();
+      if (auth && auth.pin) {
+        adminPinCache = auth.pin;
+        return adminPinCache;
+      }
+      return document.getElementById('adminPin').value.trim();
+    }
+    // 페이지 로드 시 실행
+    window.onload = function() {
+      // 구 버전 키 제거
+      try { localStorage.removeItem('adminPin'); } catch (e) {}
+      // 저장된 인증이 있고 유효기간 내인 경우에만 자동 인증
+      const auth = getSavedAdminAuth();
+      if (auth) {
+        document.getElementById('adminPin').value = auth.pin;
+        submitAdminPin(true);
+      }
+    };
+
+    function getSavedAdminAuth() {
+      try {
+        const raw = localStorage.getItem('adminAuth');
+        if (!raw) return null;
+        const obj = JSON.parse(raw);
+        if (!obj || !obj.pin || !obj.exp) return null;
+        if (Date.now() > obj.exp) {
+          localStorage.removeItem('adminAuth');
+          return null;
+        }
+        return obj;
+      } catch (e) { return null; }
+    }
+
+    function submitAdminPin(isAuto) {
+      const pin = document.getElementById('adminPin').value.trim();
+      if (!pin) {
+        showAdminMsg('PIN을 입력해주세요.', 'warning');
+        return;
+      }
+      // 간단히 유효성 확인 시도를 위해 대시보드 호출
+      google.script.run
+        .withSuccessHandler(function() {
+          setActiveAdminPin(pin);
+          const remember = document.getElementById('rememberPin').checked;
+          if (remember && !isAuto) {
+            // 12시간 유효
+            const exp = Date.now() + 12 * 60 * 60 * 1000;
+            localStorage.setItem('adminAuth', JSON.stringify({ pin, exp }));
+          } else if (!isAuto) {
+            localStorage.removeItem('adminAuth');
+          }
+          document.getElementById('adminLogin').style.display = 'none';
+          document.getElementById('adminActions').style.display = 'block';
+          document.getElementById('settingsPanel').style.display = 'block';
+          document.getElementById('dashboard').style.display = 'block';
+          loadApplicationSettings(true);
+          loadDashboard();
+        })
+        .withFailureHandler(function(err) {
+          showAdminMsg('인증 실패: ' + err, 'danger');
+        })
+        .getAdminDashboardDataWithPin(pin);
+    }
+
+    function showAdminMsg(msg, type) {
+      const el = document.getElementById('adminLoginMsg');
+      el.className = 'alert alert-' + (type || 'info');
+      el.textContent = msg;
+      el.style.display = 'block';
+    }
+    
+    // 대시보드 로드
+    function loadDashboard() {
+      document.getElementById('dashboard').innerHTML = `
+        <div class="loading">
+          <div class="spinner"></div>
+          <p>데이터를 불러오는 중...</p>
+        </div>
+      `;
+      
+      const pin = getActiveAdminPin();
+      google.script.run
+        .withSuccessHandler(displayDashboard)
+        .withFailureHandler(function(error) {
+          document.getElementById('dashboard').innerHTML = 
+            '<div class="alert alert-danger">데이터 로드 실패: ' + error + '</div>';
+        })
+        .getAdminDashboardDataWithPin(pin);
+    }
+
+    // 대시보드 표시
+    function displayDashboard(data) {
+      const { summary, undersubscribed, popular, allPrograms } = data;
+      collapsibleCounter = 0;
+
+      const statusSummary = {
+        full: 0,
+        open: 0,
+        pending: 0
+      };
+
+      allPrograms.forEach(function(program) {
+        if (program.applicantCount >= program.maxCapacity) {
+          statusSummary.full++;
+        } else if (program.applicantCount >= 3) {
+          statusSummary.open++;
+        } else {
+          statusSummary.pending++;
+        }
+      });
+
+      const avgApplicants = summary.totalPrograms > 0
+        ? (summary.totalApplications / summary.totalPrograms).toFixed(1)
+        : '0.0';
+
+      let html = `
+        <div class="stats-grid">
+          <div class="stat-card">
+            <h4>총 프로그램 수</h4>
+            <div class="number">${summary.totalPrograms}</div>
+          </div>
+          <div class="stat-card">
+            <h4>총 신청 건수</h4>
+            <div class="number">${summary.totalApplications}</div>
+          </div>
+          <div class="stat-card">
+            <h4>전체 신청률</h4>
+            <div class="number">${summary.averageRate}%</div>
+          </div>
+          <div class="stat-card">
+            <h4>총 수용 인원</h4>
+            <div class="number">${summary.totalCapacity}</div>
+          </div>
+          <div class="stat-card">
+            <h4>프로그램당 평균 신청</h4>
+            <div class="number">${avgApplicants}</div>
+          </div>
+          <div class="stat-card">
+            <h4>마감 프로그램</h4>
+            <div class="number">${statusSummary.full}</div>
+          </div>
+          <div class="stat-card">
+            <h4>개설 프로그램</h4>
+            <div class="number">${statusSummary.open}</div>
+          </div>
+          <div class="stat-card">
+            <h4>미개설 프로그램</h4>
+            <div class="number">${statusSummary.pending}</div>
+          </div>
+        </div>
+      `;
+
+      const underContent = undersubscribed.length === 0
+        ? '<div class="alert alert-success">미개설 위험 프로그램이 없습니다!</div>'
+        : generateProgramCards(undersubscribed, 'warning');
+
+      html += createCollapsibleSection('🔻 미개설 위험 (3명 미만)', underContent, { expanded: undersubscribed.length > 0 });
+
+      const popularContent = popular.length === 0
+        ? '<div class="alert alert-info">아직 정원에 도달한 프로그램이 없습니다.</div>'
+        : generateProgramCards(popular, 'success');
+
+      html += createCollapsibleSection('🔥 인기 프로그램 (정원 도달)', popularContent, { expanded: false });
+
+      html += createCollapsibleSection('📋 전체 프로그램 현황', renderProgramsTable(allPrograms), { expanded: true });
+      html += createCollapsibleSection('👥 멘토별 신청 현황', renderMentorStatsTable(allPrograms), { expanded: false });
+      html += createCollapsibleSection('🗓 일자별 신청 추이', renderDateStatsTable(allPrograms), { expanded: false });
+      html += createCollapsibleSection('⏳ 마감 임박 (정원 1명 남음)', renderNearlyFullPrograms(allPrograms), { expanded: false });
+
+      document.getElementById('dashboard').innerHTML = html;
+    }
+
+    function createCollapsibleSection(title, content, options) {
+      const opts = options || {};
+      const sectionId = `collapsible-${++collapsibleCounter}`;
+      const expanded = opts.expanded ? 'open' : '';
+      const ariaExpanded = opts.expanded ? 'true' : 'false';
+
+      return `
+        <section class="collapsible-section ${expanded}" id="${sectionId}">
+          <button class="collapsible-header" type="button" onclick="toggleCollapsible('${sectionId}', this)" aria-expanded="${ariaExpanded}">
+            <span class="collapsible-title">${title}</span>
+            <span class="collapsible-icon">▼</span>
+          </button>
+          <div class="collapsible-content">
+            ${content}
+          </div>
+        </section>
+      `;
+    }
+
+    function toggleCollapsible(sectionId, trigger) {
+      const section = document.getElementById(sectionId);
+      if (!section) return;
+      section.classList.toggle('open');
+      if (trigger) {
+        const expanded = section.classList.contains('open');
+        trigger.setAttribute('aria-expanded', expanded ? 'true' : 'false');
+      }
+    }
+
+    function renderProgramsTable(programs) {
+      if (!programs || programs.length === 0) {
+        return '<div class="alert alert-info">표시할 프로그램이 없습니다.</div>';
+      }
+
+      let html = `
+        <div class="table-wrapper">
+          <table>
+            <thead>
+              <tr>
+                <th>프로그램ID</th>
+                <th>멘토</th>
+                <th>날짜</th>
+                <th>시간</th>
+                <th>장소</th>
+                <th>신청현황</th>
+                <th>상태</th>
+                <th>신청자 명단</th>
+              </tr>
+            </thead>
+            <tbody>
+      `;
+
+      programs.forEach(function(program) {
+        const applicantNames = program.applicants.map(function(a) { return a.name; }).join(', ') || '신청자 없음';
+        const shortNames = applicantNames.length > 20 ? applicantNames.substring(0, 20) + '...' : applicantNames;
+        const statusClass = program.status === '마감' ? 'badge-full'
+          : program.status === '개설' ? 'badge-open'
+          : 'badge-warning';
+
+        html += `
+              <tr>
+                <td>${escapeHtml(program.programId)}</td>
+                <td>${escapeHtml(program.mentorName)}</td>
+                <td>${escapeHtml(program.date)}</td>
+                <td>${escapeHtml(program.time)}</td>
+                <td>${escapeHtml(program.location)}</td>
+                <td>${program.applicantCount}/${program.maxCapacity}</td>
+                <td><span class="badge ${statusClass}">${escapeHtml(program.status)}</span></td>
+                <td title="${escapeHtml(applicantNames)}">
+                  ${escapeHtml(shortNames)}
+                </td>
+              </tr>
+        `;
+      });
+
+      html += `
+            </tbody>
+          </table>
+        </div>
+      `;
+      return html;
+    }
+
+    function renderMentorStatsTable(programs) {
+      if (!programs || programs.length === 0) {
+        return '<div class="alert alert-info">멘토별 통계를 계산할 프로그램이 없습니다.</div>';
+      }
+
+      const mentorMap = {};
+      programs.forEach(function(program) {
+        const key = program.mentorName || '멘토 미정';
+        if (!mentorMap[key]) {
+          mentorMap[key] = {
+            mentorName: key,
+            programCount: 0,
+            applicants: 0,
+            full: 0,
+            open: 0,
+            pending: 0
+          };
+        }
+        const entry = mentorMap[key];
+        entry.programCount++;
+        entry.applicants += program.applicantCount;
+        if (program.applicantCount >= program.maxCapacity) {
+          entry.full++;
+        } else if (program.applicantCount >= 3) {
+          entry.open++;
+        } else {
+          entry.pending++;
+        }
+      });
+
+      const rows = Object.values(mentorMap).sort(function(a, b) {
+        return b.applicants - a.applicants;
+      });
+
+      let html = `
+        <div class="table-wrapper">
+          <table>
+            <thead>
+              <tr>
+                <th>멘토</th>
+                <th>프로그램 수</th>
+                <th>신청자 수</th>
+                <th>평균 신청</th>
+                <th>마감</th>
+                <th>개설</th>
+                <th>미개설</th>
+              </tr>
+            </thead>
+            <tbody>
+      `;
+
+      rows.forEach(function(row) {
+        const avg = row.programCount > 0 ? (row.applicants / row.programCount).toFixed(1) : '0.0';
+        html += `
+              <tr>
+                <td>${escapeHtml(row.mentorName)}</td>
+                <td>${row.programCount}</td>
+                <td>${row.applicants}</td>
+                <td>${avg}</td>
+                <td>${row.full}</td>
+                <td>${row.open}</td>
+                <td>${row.pending}</td>
+              </tr>
+        `;
+      });
+
+      html += `
+            </tbody>
+          </table>
+        </div>
+      `;
+      return html;
+    }
+
+    function renderDateStatsTable(programs) {
+      if (!programs || programs.length === 0) {
+        return '<div class="alert alert-info">표시할 데이터가 없습니다.</div>';
+      }
+
+      const dateMap = {};
+      programs.forEach(function(program) {
+        const key = program.date || '날짜 미정';
+        if (!dateMap[key]) {
+          dateMap[key] = {
+            date: key,
+            programCount: 0,
+            applicants: 0,
+            capacity: 0,
+            full: 0
+          };
+        }
+        const entry = dateMap[key];
+        entry.programCount++;
+        entry.applicants += program.applicantCount;
+        entry.capacity += program.maxCapacity;
+        if (program.applicantCount >= program.maxCapacity) {
+          entry.full++;
+        }
+      });
+
+      const rows = Object.values(dateMap).sort(function(a, b) {
+        if (a.date === b.date) return 0;
+        return a.date > b.date ? 1 : -1;
+      });
+
+      let html = `
+        <div class="table-wrapper">
+          <table>
+            <thead>
+              <tr>
+                <th>날짜</th>
+                <th>프로그램 수</th>
+                <th>신청자 수</th>
+                <th>평균 신청</th>
+                <th>신청률</th>
+                <th>마감 프로그램</th>
+              </tr>
+            </thead>
+            <tbody>
+      `;
+
+      rows.forEach(function(row) {
+        const avg = row.programCount > 0 ? (row.applicants / row.programCount).toFixed(1) : '0.0';
+        const rate = row.capacity > 0 ? Math.round((row.applicants / row.capacity) * 100) : 0;
+        html += `
+              <tr>
+                <td>${escapeHtml(row.date)}</td>
+                <td>${row.programCount}</td>
+                <td>${row.applicants}</td>
+                <td>${avg}</td>
+                <td>${rate}%</td>
+                <td>${row.full}</td>
+              </tr>
+        `;
+      });
+
+      html += `
+            </tbody>
+          </table>
+        </div>
+      `;
+      return html;
+    }
+
+    function renderNearlyFullPrograms(programs) {
+      if (!programs || programs.length === 0) {
+        return '<div class="alert alert-info">표시할 프로그램이 없습니다.</div>';
+      }
+      const targets = programs.filter(function(program) {
+        return program.maxCapacity - program.applicantCount === 1;
+      });
+      if (targets.length === 0) {
+        return '<div class="alert alert-info">마감 임박 프로그램이 없습니다.</div>';
+      }
+      return generateProgramCards(targets, 'success');
+    }
+    
+    function loadApplicationSettings(isSilent) {
+      const pin = getActiveAdminPin();
+      if (!pin) return;
+
+      google.script.run
+        .withSuccessHandler(function(settings) {
+          populateApplicationSettings(settings);
+          if (isSilent) {
+            const el = document.getElementById('settingsMessage');
+            if (el) el.style.display = 'none';
+          } else {
+            showSettingsMsg('신청 기간 정보를 새로 불러왔습니다.', 'info');
+          }
+        })
+        .withFailureHandler(function(error) {
+          showSettingsMsg('설정을 불러오지 못했습니다: ' + error, 'danger');
+        })
+        .getApplicationSettingsWithPin(pin);
+    }
+
+    function populateApplicationSettings(settings) {
+      if (!settings) return;
+      document.getElementById('applicationStart').value = settings.startDateTime || '';
+      document.getElementById('applicationEnd').value = settings.endDateTime || '';
+      updateSettingsSummary(settings);
+    }
+
+    function saveApplicationSettings() {
+      const start = document.getElementById('applicationStart').value;
+      const end = document.getElementById('applicationEnd').value;
+
+      if (!start || !end) {
+        showSettingsMsg('시작과 종료 일시를 모두 입력해주세요.', 'warning');
+        return;
+      }
+      if (start >= end) {
+        showSettingsMsg('종료 일시는 시작 일시 이후여야 합니다.', 'warning');
+        return;
+      }
+
+      const pin = getActiveAdminPin();
+      google.script.run
+        .withSuccessHandler(function(updated) {
+          populateApplicationSettings(updated);
+          showSettingsMsg('신청 기간이 저장되었습니다.', 'success');
+          loadDashboard();
+        })
+        .withFailureHandler(function(error) {
+          showSettingsMsg('저장 실패: ' + error, 'danger');
+        })
+        .updateApplicationSettingsWithPin(pin, {
+          startDateTime: start,
+          endDateTime: end
+        });
+    }
+
+    function showSettingsMsg(message, type) {
+      const el = document.getElementById('settingsMessage');
+      if (!el) return;
+      el.className = 'alert alert-' + (type || 'info');
+      el.textContent = message;
+      el.style.display = 'block';
+    }
+
+    function updateSettingsSummary(settings) {
+      const summary = document.getElementById('settingsSummary');
+      if (!summary) return;
+      if (settings && settings.startDateLabel && settings.endDateLabel) {
+        summary.textContent = `현재 신청 기간: ${settings.startDateLabel} ~ ${settings.endDateLabel}`;
+      } else {
+        summary.textContent = '';
+      }
+    }
+
+    // 프로그램 카드 생성
+    function generateProgramCards(programs, type) {
+      let html = '<div class="program-grid">';
+      
+      programs.forEach(program => {
+        const applicantNames = program.applicants.map(a => a.name).join(', ') || '신청자 없음';
+        
+        const status = program.status || (program.applicantCount >= program.maxCapacity ? '마감' : (program.applicantCount >= 3 ? '개설' : '미개설'));
+        const statusClass = status === '마감' ? 'badge-full' : status === '개설' ? 'badge-open' : 'badge-warning';
+
+        html += `
+          <div class="program-card">
+            <h4>${escapeHtml(program.mentorName)} 멘토</h4>
+            <div class="program-info">
+              <strong>날짜:</strong> ${escapeHtml(program.date)}<br>
+              <strong>시간:</strong> ${escapeHtml(program.time)}<br>
+              <strong>장소:</strong> ${escapeHtml(program.location)}<br>
+              <strong>신청자:</strong> ${program.applicantCount}/${program.maxCapacity}명
+              <div class="badge-row" style="margin-top:6px;">
+                <span class="badge ${statusClass}">${status}</span>
+              </div>
+            </div>
+            <div class="program-info">
+              <strong>신청자 명단:</strong><br>
+              ${escapeHtml(applicantNames)}
+            </div>
+          </div>
+        `;
+      });
+      
+      html += '</div>';
+      return html;
+    }
+    
+    // 프로그램 동기화
+    function syncPrograms() {
+      if (!confirm('Forms 응답 데이터를 프로그램 목록으로 동기화하시겠습니까?')) {
+        return;
+      }
+      
+      const pin = getActiveAdminPin();
+      google.script.run
+        .withSuccessHandler(function(count) {
+          alert(`동기화 완료! ${count}개의 프로그램이 업데이트되었습니다.`);
+          loadDashboard();
+        })
+        .withFailureHandler(function(error) {
+          alert('동기화 실패: ' + error);
+        })
+        .syncFormsToProgramsWithPin(pin);
+    }
+    
+    // 요약 시트 업데이트
+    function updateSummary() {
+      const pin = getActiveAdminPin();
+      google.script.run
+        .withSuccessHandler(function(message) {
+          alert(message);
+        })
+        .withFailureHandler(function(error) {
+          alert('업데이트 실패: ' + error);
+        })
+        .updateSummarySheetWithPin(pin);
+    }
+
+    function exportUnderEnrolled() {
+      const pin = getActiveAdminPin();
+      google.script.run
+        .withSuccessHandler(function(message) {
+          alert(message);
+        })
+        .withFailureHandler(function(error) {
+          alert('시트 업데이트 실패: ' + error);
+        })
+        .exportUnderEnrolledApplicantsWithPin(pin);
+    }
+
+    function adminLogout() {
+      try { localStorage.removeItem('adminAuth'); } catch (e) {}
+      setActiveAdminPin('');
+      document.getElementById('adminLogin').style.display = 'block';
+      document.getElementById('adminActions').style.display = 'none';
+      document.getElementById('dashboard').style.display = 'none';
+      document.getElementById('settingsPanel').style.display = 'none';
+      document.getElementById('settingsMessage').style.display = 'none';
+      document.getElementById('settingsSummary').textContent = '';
+      document.getElementById('adminPin').value = '';
+      showAdminMsg('로그아웃되었습니다.', 'info');
+    }
+  </script>
+</body>
+</html>

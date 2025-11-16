@@ -1,0 +1,13 @@
+# macOS
+.DS_Store
+
+# Google Apps Script / clasp
+.clasp.json
+appsscript.json
+
+# 운영 데이터 (실제 개인정보)
+*.csv
+
+# 샘플 데이터 디렉터리는 명시적으로 추적 (예: data-sample/*.csv)
+!data-sample/
+!data-sample/*.sample.csv

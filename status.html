@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <base target="_top">
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;600;700&display=swap" rel="stylesheet">
+  <?!= include('styles'); ?>
+  <?!= include('common'); ?>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>📋 내 신청현황</h1>
+      <p>신청한 프로그램을 확인하고 취소할 수 있습니다</p>
+    </div>
+    
+    <div class="content">
+      <div id="periodAlert" class="alert"></div>
+      
+      <div id="loginForm">
+        <h2>신청 내역 조회</h2>
+        <form id="checkForm">
+          <div class="form-group">
+            <label for="studentId">학번 *</label>
+            <input type="text" id="studentId" required placeholder="예: 202512345">
+          </div>
+          
+          <button type="submit" class="btn btn-primary">조회하기</button>
+        </form>
+      </div>
+      
+      <div id="applicationList" style="display: none;">
+        <h2>나의 신청 내역</h2>
+        <div id="cancelInfo" class="alert alert-info"></div>
+        
+        <div id="applications">
+          <div class="loading">
+            <div class="spinner"></div>
+            <p>신청 내역을 불러오는 중...</p>
+          </div>
+        </div>
+        
+        <button class="btn btn-secondary" onclick="backToSearch()">다시 조회</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const { escapeHtml, PERIOD_STATUS, resolvePeriodStatus } = CommonUI;
+    let currentStudentId = '';
+    let canCancel = false;
+
+    function getStatusLabel(app) {
+      const current = parseInt(app && app.currentCount, 10) || 0;
+      const max = parseInt(app && app.maxCount, 10) || 7;
+      if (current >= max) return '마감';
+      if (app && app.programStatus) return String(app.programStatus);
+      return current >= 3 ? '개설' : '미개설';
+    }
+
+    function getStatusBadgeClass(app) {
+      const label = getStatusLabel(app);
+      if (label === '마감') return 'badge-full';
+      if (label === '개설') return 'badge-open';
+      return 'badge-warning';
+    }
+    
+    // 페이지 로드 시 실행
+    window.onload = function() {
+      checkPeriod();
+    };
+    
+    // 신청 기간 확인
+    function checkPeriod() {
+      google.script.run
+        .withSuccessHandler(function(result) {
+          const alertDiv = document.getElementById('periodAlert');
+          canCancel = result.isOpen;
+          
+          const status = resolvePeriodStatus(result);
+          let icon = '✅';
+          let alertClass = 'alert alert-success';
+
+          if (status === PERIOD_STATUS.CLOSED) {
+            icon = '⚠️';
+            alertClass = 'alert alert-warning';
+            canCancel = false;
+          } else if (status === PERIOD_STATUS.SCHEDULED) {
+            icon = '⏳';
+            alertClass = 'alert alert-info';
+            canCancel = false;
+          }
+
+          const periodText = result.startDateLabel && result.endDateLabel ?
+            `<div class="muted">신청 기간: ${escapeHtml(result.startDateLabel)} ~ ${escapeHtml(result.endDateLabel)}</div>` : '';
+
+          alertDiv.className = alertClass;
+          alertDiv.innerHTML = `${icon} ${escapeHtml(result.message)}${periodText}`;
+
+          const cancelInfoDiv = document.getElementById('cancelInfo');
+          if (cancelInfoDiv) {
+            if (status === PERIOD_STATUS.OPEN) {
+              cancelInfoDiv.textContent = result.endDateLabel ?
+                `신청 취소는 ${result.endDateLabel}까지만 가능합니다.` :
+                '현재 취소가 가능합니다.';
+            } else if (status === PERIOD_STATUS.SCHEDULED) {
+              cancelInfoDiv.textContent = '취소는 신청 기간 시작 이후 가능합니다.';
+            } else {
+              cancelInfoDiv.textContent = '현재는 취소 기간이 아닙니다.';
+            }
+          }
+        })
+        .withFailureHandler(function(error) {
+          console.error('Error:', error);
+        })
+        .checkApplicationPeriod();
+    }
+    
+    // 폼 제출
+    document.getElementById('checkForm').addEventListener('submit', function(e) {
+      e.preventDefault();
+      
+      currentStudentId = document.getElementById('studentId').value;
+      loadApplications(currentStudentId);
+    });
+    
+    // 신청 내역 로드
+    function loadApplications(studentId) {
+      google.script.run
+        .withSuccessHandler(function(data) {
+          if (data && data.length > 0) {
+            displayApplications(data);
+            document.getElementById('loginForm').style.display = 'none';
+            document.getElementById('applicationList').style.display = 'block';
+          } else {
+            document.getElementById('applications').innerHTML = 
+              '<div class="alert alert-warning">신청한 프로그램이 없습니다.</div>';
+            document.getElementById('loginForm').style.display = 'none';
+            document.getElementById('applicationList').style.display = 'block';
+          }
+          checkPeriod();
+        })
+        .withFailureHandler(function(error) {
+          alert('조회 실패: ' + error);
+        })
+        .getMyApplications(studentId);
+    }
+    
+    // 신청 내역 표시
+    function displayApplications(applications) {
+      try {
+        if (!applications || applications.length === 0) {
+          document.getElementById('applications').innerHTML = 
+            '<div class="alert alert-warning">신청한 프로그램이 없습니다.</div>';
+          return;
+        }
+        
+        let html = '<div class="table-wrapper"><table>';
+      html += `
+        <thead>
+          <tr>
+            <th>신청일시</th>
+            <th>멘토</th>
+            <th>날짜</th>
+            <th>시간</th>
+            <th>장소</th>
+            <th>내용</th>
+            <th>신청현황</th>
+            <th>상태</th>
+            <th>작업</th>
+          </tr>
+        </thead>
+        <tbody>
+      `;
+      
+      applications.forEach(app => {
+        // timestamp는 서버에서 이미 한국어 형식 문자열로 전달됨
+        const timestamp = app.timestamp || '시간 정보 없음';
+        
+        html += `
+          <tr>
+            <td>${escapeHtml(timestamp)}</td>
+            <td>${escapeHtml(app.mentorName)}</td>
+            <td>${escapeHtml(app.date)}</td>
+            <td>${escapeHtml(app.startTime)}-${escapeHtml(app.endTime)}</td>
+            <td>${escapeHtml(app.location)}</td>
+            <td>${escapeHtml(app.content)}</td>
+            <td>${escapeHtml(String(app.currentCount || 0))}/${escapeHtml(String(app.maxCount || 7))}명</td>
+            <td><span class="badge ${getStatusBadgeClass(app)}">${escapeHtml(getStatusLabel(app))}</span></td>
+            <td>
+              ${canCancel ? 
+                `<button class="btn btn-danger" onclick="cancelApplication('${app.applicationId}')">취소</button>` :
+                '<span class="badge badge-warning">취소불가</span>'
+              }
+            </td>
+          </tr>
+        `;
+      });
+      
+      html += '</tbody></table></div>';
+      
+      html += `
+        <div class="alert alert-info" style="margin-top: 20px;">
+          총 ${applications.length}개 프로그램 신청 중 (최대 3개)
+        </div>
+      `;
+      
+      document.getElementById('applications').innerHTML = html;
+      } catch (error) {
+        document.getElementById('applications').innerHTML = 
+          '<div class="alert alert-danger">데이터를 표시하는 중 오류가 발생했습니다.</div>';
+      }
+    }
+    
+    // 신청 취소
+    function cancelApplication(applicationId) {
+      if (!confirm('정말로 취소하시겠습니까?\n취소 후 다시 신청하려면 정원이 남아있어야 합니다.')) {
+        return;
+      }
+      
+      google.script.run
+        .withSuccessHandler(function(result) {
+          if (result.success) {
+            alert(result.message);
+            loadApplications(currentStudentId);
+          } else {
+            alert('취소 실패: ' + result.message);
+          }
+        })
+        .withFailureHandler(function(error) {
+          alert('오류가 발생했습니다: ' + error);
+        })
+        .cancelApplication(applicationId, currentStudentId);
+    }
+    
+    // 다시 조회
+    function backToSearch() {
+      document.getElementById('loginForm').style.display = 'block';
+      document.getElementById('applicationList').style.display = 'none';
+      document.getElementById('studentId').value = '';
+    }
+  </script>
+</body>
+</html>
